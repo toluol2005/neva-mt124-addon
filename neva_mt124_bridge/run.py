@@ -134,6 +134,8 @@ def send_command(ser, cmd_key):
         else:
             parity_cmd.append(byte)
     ser.write(parity_cmd)
+    time.sleep(0.2)
+    logging.debug(f"Sent {cmd_key}: {parity_cmd.hex()}")
     return len(parity_cmd)
 
 def response_meter(ser, cmd_key, timeout=1):
@@ -151,9 +153,11 @@ def response_meter(ser, cmd_key, timeout=1):
     # Проверка CRC и формата (адаптировано из C)
     if cmd_key == 'open_channel':
         if data[0] != ord('/'):
+            logging.debug(f"Raw data: {data.hex()}")
             return None, "Invalid response"
     elif cmd_key == 'password_6102':
         if data[0] != ACK:
+            logging.debug(f"Raw data: {data.hex()}")
             return None, "Invalid response"
     else:
         crc = checksum(data)
@@ -495,7 +499,7 @@ def main():
     while True:
         try:
             logging.debug("Starting poll cycle")
-            with serial.Serial(serial_port, initial_baudrate, timeout=2, parity=serial.PARITY_EVEN) as ser:  # Even parity как в C
+            with serial.Serial(serial_port, initial_baudrate, timeout=10, parity=serial.PARITY_EVEN) as ser:  # Even parity как в C
                 neva_type = open_session(ser)
                 if neva_type != NEVA_124_UNKNOWN:
                     if ack_start(ser, neva_type):
