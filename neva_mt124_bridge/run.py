@@ -185,8 +185,9 @@ def open_session(ser):
     return NEVA_124_UNKNOWN
 
 def ack_start(ser, neva_type):
-    send_command(ser, 'ack_start')
     ser.baudrate = BAUDRATE_9600
+    send_command(ser, 'ack_start')
+    
     data, err = response_meter(ser, 'ack_start')
     logging.debug("Response: %s, error: %s", data, err)
     if err == "OK":
