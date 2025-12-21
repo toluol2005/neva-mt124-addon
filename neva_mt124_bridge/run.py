@@ -213,8 +213,8 @@ def ack_start(ser, neva_type):
     ser.baudrate = BAUDRATE_9600
     send_command(ser, 'ack_start')
     
-    data, err = response_meter(ser, 'ack_start')
-    logging.debug("Response: %s, error: %s", data, err)
+    data, err = response_meter(ser, 'ack_start', timeout=2)
+    logging.debug(f"ack_start response raw: {data.hex() if data else 'None'}, error: {err}")
     if err == "OK":
         if neva_type == NEVA_124_6102:
             send_command(ser, 'password_6102')
