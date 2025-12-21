@@ -171,24 +171,31 @@ def open_session(ser):
     send_command(ser, 'open_channel')
     data, err = response_meter(ser, 'open_channel')
     logging.debug("Response: %s, error: %s", data, err)
+    
     if err != "OK":
-        return None
+        return NEVA_124_UNKNOWN
     
     time.sleep(0.1)
     
-    if len(data) < 5:
-        logging.debug(f"Response too short: {len(data)} bytes")
-        return NEVA_124_UNKNOWN
-        
-    # Парсинг типа (как в C)
-    dot_pos = data.find(b'.')
-    if dot_pos != -1:
-        type_str = data[dot_pos+1:dot_pos+5].decode(errors='ignore')
-        type_val = str2uint(type_str)
-        if type_val == 6102:
-            return NEVA_124_6102
-        elif type_val == 7109:
-            return NEVA_124_7109
+    # Если ответ равен '/', считаем что соединение установлено
+    if data == bytearray(b'/'):
+        logging.debug("Received '/', connection established")
+        # ВАЖНО: Мы не знаем точный тип, но можно предположить MT124
+        # Или вернуть NEVA_124_6102 по умолчанию для продолжения работы
+        return NEVA_124_6102  # Или NEVA_124_7109, в зависимости от вашего счётчика
+    
+    # Старая логика парсинга (оставляем на случай расширенных ответов)
+    if len(data) >= 5:
+        dot_pos = data.find(b'.')
+        if dot_pos != -1:
+            type_str = data[dot_pos+1:dot_pos+5].decode(errors='ignore')
+            logging.debug(f"Parsed type string: '{type_str}'")
+            type_val = str2uint(type_str)
+            logging.debug(f"Parsed type value: {type_val}")
+            if type_val == 6102:
+                return NEVA_124_6102
+            elif type_val == 7109:
+                return NEVA_124_7109
     return NEVA_124_UNKNOWN
 
 def ack_start(ser, neva_type):
