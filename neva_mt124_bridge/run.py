@@ -495,7 +495,7 @@ def main():
     while True:
         try:
             logging.debug("Starting poll cycle")
-            with serial.Serial(serial_port, initial_baudrate, timeout=2, parity=serial.PARITY_EVEN) as ser:  # Even parity как в C
+            with serial.Serial(serial_port, baudrate=BAUDRATE_300, bytesize=serial.SEVENBITS, parity=serial.PARITY_EVEN, stopbits=serial.STOPBITS_ONE, timeout=2) as ser:  # Even parity как в C
                 neva_type = open_session(ser)
                 if neva_type != NEVA_124_UNKNOWN:
                     if ack_start(ser, neva_type):
