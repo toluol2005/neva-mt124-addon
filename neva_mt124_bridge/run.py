@@ -137,8 +137,10 @@ def send_command(ser, cmd_key):
     # ser.write(parity_cmd)
     ser.write(cmd)  # ← отправляем сырые байты
     time.sleep(0.2)
-    logging.debug(f"Sent {cmd_key}: {parity_cmd.hex()}")
-    return len(parity_cmd)
+    logging.debug(f"Sent {cmd_key} (raw): {cmd.hex()}")
+    return len(cmd)    
+    #logging.debug(f"Sent {cmd_key}: {parity_cmd.hex()}")
+    #return len(parity_cmd)
 
 def response_meter(ser, cmd_key, timeout=1):
     start = time.time()
