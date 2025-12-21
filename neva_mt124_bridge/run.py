@@ -173,6 +173,13 @@ def open_session(ser):
     logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return None
+    
+    time.sleep(0.1)
+    
+    if len(data) < 5:
+        logging.debug(f"Response too short: {len(data)} bytes")
+        return NEVA_124_UNKNOWN
+        
     # Парсинг типа (как в C)
     dot_pos = data.find(b'.')
     if dot_pos != -1:
