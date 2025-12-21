@@ -127,13 +127,15 @@ def str_from_brackets(p_str):
 
 def send_command(ser, cmd_key):
     cmd = COMMANDS[cmd_key]
-    parity_cmd = bytearray()
-    for byte in cmd:
-        if check_even_parity(byte):
-            parity_cmd.append(byte | 0x80)
-        else:
-            parity_cmd.append(byte)
-    ser.write(parity_cmd)
+    # ВРЕМЕННО: отправляем без parity преобразования
+    # parity_cmd = bytearray()
+    # for byte in cmd:
+    #    if check_even_parity(byte):
+    #        parity_cmd.append(byte | 0x80)
+    #    else:
+    #        parity_cmd.append(byte)
+    # ser.write(parity_cmd)
+    ser.write(cmd)  # ← отправляем сырые байты
     time.sleep(0.2)
     logging.debug(f"Sent {cmd_key}: {parity_cmd.hex()}")
     return len(parity_cmd)
