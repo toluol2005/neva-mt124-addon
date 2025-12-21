@@ -1,8 +1,11 @@
-ARG BUILD_FROM=ghcr.io/home-assistant/amd64-base-python:3.12-alpine-3.20  # Подстройте под вашу архитектуру
-FROM ${BUILD_FROM}
+ARG BUILD_FROM
+FROM $BUILD_FROM
+
+# Установка Python и pip (Alpine-пакеты)
+RUN apk add --no-cache python3 py3-pip
 
 # Установка зависимостей
-RUN pip install --no-cache-dir pyserial paho-mqtt
+RUN pip3 install --no-cache-dir pyserial paho-mqtt
 
 # Копируем скрипт
 COPY run.py /
