@@ -13,15 +13,15 @@ startup: application
 boot: auto
 init: false
 services:
-  - mqtt: want  # Использует MQTT из HA
+  - "mqtt:want"  # List строк в формате "service:function"
 discovery:
-  - mqtt  # Для auto-discovery
+  - "mqtt"  # List строк
 devices:
-  - /dev/ttyUSB0:/dev/ttyUSB0:rwm  # Доступ к порту; подстройте если другой порт
+  - "/dev/ttyUSB0"  # Только хост-пути, без :rwm (deprecated)
 uart: true
 usb: true
 privileged:
-  - SYS_RAWIO  # Для низкоуровневого доступа к UART
+  - "SYS_RAWIO"  # List строк с capabilities
 options:
   serial_port: "/dev/ttyUSB0"
   initial_baudrate: 300
