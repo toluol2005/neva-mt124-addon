@@ -150,6 +150,16 @@ def response_meter(ser, cmd_key, timeout=1):
         time.sleep(0.01)
     if not data:
         return None, "Timeout"
+
+    # ОСОБАЯ ОБРАБОТКА ДЛЯ ACK_START
+    if cmd_key == 'ack_start':
+        # Для ack_start ожидаем просто ACK (0x06) или короткий ответ
+        if data[0] == ACK:  # 0x06
+            return data, "OK"
+        else:
+            logging.debug(f"ack_start - invalid response: {data.hex()}")
+            return None, "Invalid ACK"
+            
     # Проверка CRC и формата (адаптировано из C)
     if cmd_key == 'open_channel':
         if data[0] != ord('/'):
@@ -162,8 +172,9 @@ def response_meter(ser, cmd_key, timeout=1):
     else:
         crc = checksum(data)
         if crc != data[-1]:
+            logging.debug(f"CRC mismatch: calculated {crc:02x}, received {data[-1]:02x}")
             return None, "CRC error"
-        # Дополнительные проверки по cmd
+    
     return data, "OK"
 
 # Основные функции get_*
