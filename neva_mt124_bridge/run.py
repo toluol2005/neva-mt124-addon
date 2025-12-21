@@ -4,6 +4,10 @@ import time
 import json
 import os
 import sys
+import logging
+
+logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.debug("Script started - debugging mode")
 
 # Константы из C-кода
 ACK = 0x06
@@ -162,6 +166,7 @@ def response_meter(ser, cmd_key, timeout=1):
 def open_session(ser):
     send_command(ser, 'open_channel')
     data, err = response_meter(ser, 'open_channel')
+    logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return None
     # Парсинг типа (как в C)
@@ -179,19 +184,23 @@ def ack_start(ser, neva_type):
     send_command(ser, 'ack_start')
     ser.baudrate = BAUDRATE_9600
     data, err = response_meter(ser, 'ack_start')
+    logging.debug("Response: %s, error: %s", data, err)
     if err == "OK":
         if neva_type == NEVA_124_6102:
             send_command(ser, 'password_6102')
             _, err = response_meter(ser, 'password_6102')
+            logging.debug("Response: %s, error: %s", data, err)
         elif neva_type == NEVA_124_7109:
             send_command(ser, 'password_7109')
             _, err = response_meter(ser, 'password_7109')
+            logging.debug("Response: %s, error: %s", data, err)
         return err == "OK"
     return False
 
 def get_tariffs_6102(ser):
     send_command(ser, 'tariffs_6102')
     data, err = response_meter(ser, 'tariffs_6102')
+    logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return {}
     bracket_pos = data.find(b'(')
@@ -220,6 +229,7 @@ def get_tariffs_6102(ser):
 def get_tariffs_7109(ser):
     send_command(ser, 'tariffs_7109')
     data, err = response_meter(ser, 'tariffs_7109')
+    logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return {}
     bracket_pos = data.find(b']')
@@ -250,6 +260,7 @@ def get_tariffs_7109(ser):
 def get_power_data(ser, neva_type):
     send_command(ser, 'power_data')
     data, err = response_meter(ser, 'power_data')
+    logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return None
     power = number_from_brackets(data)
@@ -276,6 +287,7 @@ def get_power_data(ser, neva_type):
 def get_voltage_data(ser):
     send_command(ser, 'volts_data')
     data, err = response_meter(ser, 'volts_data')
+    logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return None
     volts = number_from_brackets(data)
@@ -286,6 +298,7 @@ def get_voltage_data(ser):
 def get_amps_data(ser):
     send_command(ser, 'amps_data')
     data, err = response_meter(ser, 'amps_data')
+    logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return None
     amps = number_from_brackets(data)
@@ -296,6 +309,7 @@ def get_amps_data(ser):
 def get_serial_number_data(ser):
     send_command(ser, 'serial_number')
     data, err = response_meter(ser, 'serial_number')
+    logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return None
     return str_from_brackets(data)
@@ -303,6 +317,7 @@ def get_serial_number_data(ser):
 def get_resbat_data(ser):
     send_command(ser, 'sensors_data')
     data, err = response_meter(ser, 'sensors_data')
+    logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return None
     bracket_pos = data.find(b'(')
@@ -453,6 +468,7 @@ def publish_discovery(client, prefix, neva_type):
 # Основной цикл
 def main():
     # Чтение опций из HA (config.json в /data/options.json)
+    logging.debug("Opening options.json")
     with open('/data/options.json', 'r') as f:
         options = json.load(f)
     serial_port = options['serial_port']
@@ -471,12 +487,14 @@ def main():
     if mqtt_user and mqtt_pass:
         client.username_pw_set(mqtt_user, mqtt_pass)
     client.connect(mqtt_host, mqtt_port, 60)
+    logging.debug("Connected to MQTT at %s:%d", mqtt_host, mqtt_port)
     client.loop_start()
     
     discovered = False
     
     while True:
         try:
+            logging.debug("Starting poll cycle")
             with serial.Serial(serial_port, initial_baudrate, timeout=2, parity=serial.PARITY_EVEN) as ser:  # Even parity как в C
                 neva_type = open_session(ser)
                 if neva_type != NEVA_124_UNKNOWN:
@@ -527,7 +545,8 @@ def main():
                         
                 close_session(ser)
         except Exception as e:
-            print(f"Error: {e}")
+            logging.error("Global error: %s", e)
+#            print(f"Error: {e}")
         
         time.sleep(interval)
 
