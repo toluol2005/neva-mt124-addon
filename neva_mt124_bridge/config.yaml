@@ -2,7 +2,7 @@ name: Neva MT124 Meter Bridge
 version: "1.0.0"
 slug: neva_mt124_bridge
 description: Reads data from Neva MT124 meter via serial port and publishes to MQTT for Home Assistant.
-url: "https://github.com/yourusername/neva-mt124-addon"
+url: "https://github.com/toluol2005/neva-mt124-addon"
 arch:
   - aarch64
   - amd64
