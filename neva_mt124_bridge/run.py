@@ -453,13 +453,14 @@ def close_session(ser):
 
 # MQTT Discovery конфиги (публикуем один раз)
 def publish_discovery(client, prefix, neva_type):
+    logging.debug("Publishing MQTT Discovery configs")
     device_info = {
         "identifiers": ["neva_mt124_meter"],
         "name": "Neva MT124 Meter",
         "model": "MT124" + ("-6102" if neva_type == NEVA_124_6102 else "-7109"),
         "manufacturer": "Neva"
     }
-    
+
     # Сенсор для суммарной энергии
     config = {
         "name": "Total Energy",
@@ -471,7 +472,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/total_energy/config", json.dumps(config), retain=True)
-    
+
     # Аналогично для тарифов 1-4, power, voltage, current, battery, serial
     # Tariff 1
     config = {
@@ -484,7 +485,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/tariff1/config", json.dumps(config), retain=True)
-    
+
     # Tariff 2
     config = {
         "name": "Tariff 2 Energy",
@@ -496,7 +497,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/tariff2/config", json.dumps(config), retain=True)
-    
+
     # Tariff 3
     config = {
         "name": "Tariff 3 Energy",
@@ -508,7 +509,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/tariff3/config", json.dumps(config), retain=True)
-    
+
     # Tariff 4
     config = {
         "name": "Tariff 4 Energy",
@@ -520,7 +521,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/tariff4/config", json.dumps(config), retain=True)
-    
+
     # Power
     config = {
         "name": "Active Power",
@@ -532,7 +533,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/power/config", json.dumps(config), retain=True)
-    
+
     # Voltage
     config = {
         "name": "Voltage",
@@ -544,7 +545,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/voltage/config", json.dumps(config), retain=True)
-    
+
     # Current
     config = {
         "name": "Current",
@@ -556,7 +557,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/current/config", json.dumps(config), retain=True)
-    
+
     # Battery
     config = {
         "name": "Battery Level",
@@ -568,7 +569,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/battery/config", json.dumps(config), retain=True)
-    
+
     # Serial Number (string)
     config = {
         "name": "Serial Number",
@@ -577,6 +578,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/serial/config", json.dumps(config), retain=True)
+    logging.debug("Completed publishing discovery configs")
 
 # Основной цикл
 def main():
@@ -597,6 +599,7 @@ def main():
     mqtt_pass = os.environ.get('HASSIO_MQTT_PASSWORD', '')
     
     client = mqtt.Client()
+    logging.debug("Connecting to MQTT %s:%d", mqtt_host, mqtt_port)
     if mqtt_user and mqtt_pass:
         client.username_pw_set(mqtt_user, mqtt_pass)
     client.connect(mqtt_host, mqtt_port, 60)
@@ -620,37 +623,56 @@ def main():
                         if serial_num:
                             data['serial'] = serial_num
                             client.publish(f"{prefix}/serial", serial_num)
+                            logging.debug("Publishing serial: %s to %s", serial_num, f"{prefix}/serial")
                         # Date release не поддерживается, пропускаем или статично "Not supported"
                         client.publish(f"{prefix}/date_release", "Not supported")
-                        
+                        logging.debug("Publishing date_release: Not supported")
+
                         if neva_type == NEVA_124_6102:
                             tariffs = get_tariffs_6102(ser)
                         else:
                             tariffs = get_tariffs_7109(ser)
-                        
+
                         battery = get_resbat_data(ser)
                         if battery is not None:
                             data['battery'] = battery
                             client.publish(f"{prefix}/battery", battery)
-                        
+                            logging.debug("Publishing battery: %s to %s", battery, f"{prefix}/battery")
+
                         if tariffs:
-                            client.publish(f"{prefix}/total_energy", tariffs['tariff_summ'] / tariffs['energy_divisor'])
-                            client.publish(f"{prefix}/tariff1", tariffs['tariff1'] / tariffs['energy_divisor'])
-                            client.publish(f"{prefix}/tariff2", tariffs['tariff2'] / tariffs['energy_divisor'])
-                            client.publish(f"{prefix}/tariff3", tariffs['tariff3'] / tariffs['energy_divisor'])
-                            client.publish(f"{prefix}/tariff4", tariffs['tariff4'] / tariffs['energy_divisor'])
-                        
+                            total_energy = tariffs['tariff_summ'] / tariffs['energy_divisor']
+                            client.publish(f"{prefix}/total_energy", total_energy)
+                            logging.debug("Publishing total_energy: %s", total_energy)
+                            tariff1 = tariffs['tariff1'] / tariffs['energy_divisor']
+                            client.publish(f"{prefix}/tariff1", tariff1)
+                            logging.debug("Publishing tariff1: %s", tariff1)
+                            tariff2 = tariffs['tariff2'] / tariffs['energy_divisor']
+                            client.publish(f"{prefix}/tariff2", tariff2)
+                            logging.debug("Publishing tariff2: %s", tariff2)
+                            tariff3 = tariffs['tariff3'] / tariffs['energy_divisor']
+                            client.publish(f"{prefix}/tariff3", tariff3)
+                            logging.debug("Publishing tariff3: %s", tariff3)
+                            tariff4 = tariffs['tariff4'] / tariffs['energy_divisor']
+                            client.publish(f"{prefix}/tariff4", tariff4)
+                            logging.debug("Publishing tariff4: %s", tariff4)
+
                         power, power_div, mult = get_power_data(ser, neva_type)
                         if power is not None:
-                            client.publish(f"{prefix}/power", (power * mult) / power_div)
-                        
+                            power_val = (power * mult) / power_div
+                            client.publish(f"{prefix}/power", power_val)
+                            logging.debug("Publishing power: %s", power_val)
+
                         volts, volts_div = get_voltage_data(ser)
                         if volts is not None:
-                            client.publish(f"{prefix}/voltage", volts / volts_div)
-                        
+                            volts_val = volts / volts_div
+                            client.publish(f"{prefix}/voltage", volts_val)
+                            logging.debug("Publishing voltage: %s", volts_val)
+
                         amps, amps_div = get_amps_data(ser)
                         if amps is not None:
-                            client.publish(f"{prefix}/current", amps / amps_div)
+                            amps_val = amps / amps_div
+                            client.publish(f"{prefix}/current", amps_val)
+                            logging.debug("Publishing current: %s", amps_val)
                         
                         print(f"Data published: {data}")
                         close_session(ser)
