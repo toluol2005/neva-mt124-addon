@@ -373,7 +373,7 @@ def get_power_data(ser, neva_type):
     data, err = response_meter(ser, 'power_data')
     logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
-        return None
+        return None, None, None
     power = number_from_brackets(data)
     if power is not None:
         global divisor, multiplier
@@ -400,22 +400,22 @@ def get_voltage_data(ser):
     data, err = response_meter(ser, 'volts_data')
     logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
-        return None
+        return None, None
     volts = number_from_brackets(data)
     if volts is not None:
         return volts, divisor & 0xffff
-    return None
+    return None, None
 
 def get_amps_data(ser):
     send_command(ser, 'amps_data')
     data, err = response_meter(ser, 'amps_data')
     logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
-        return None
+        return None, None
     amps = number_from_brackets(data)
     if amps is not None:
         return amps, divisor & 0xffff
-    return None
+    return None, None
 
 def get_serial_number_data(ser):
     send_command(ser, 'serial_number')
