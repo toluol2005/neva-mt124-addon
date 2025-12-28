@@ -189,18 +189,35 @@ def response_meter(ser, cmd_key, timeout=1):
         data = bytearray(b & 0x7f for b in data)
         return data, "OK"
 
-    # Общая ветка для протокольных команд со структурой (CRC в конце)
+    # Общая ветка для протокольных команд со структурой (SOH ... ETX <CRC>)
+    raw = bytearray()
     while time.time() - start < timeout:
         if ser.in_waiting:
-            data.extend(ser.read(ser.in_waiting))
-            # Применяем маску parity к накопленному буферу
-            data = bytearray(b & 0x7f for b in data)
-            if len(data) > 0:
+            raw.extend(ser.read(ser.in_waiting))
+            # Посмотрим, есть ли в маскированном буфере ETX (0x03)
+            masked = bytearray(b & 0x7f for b in raw)
+            etx_pos = None
+            try:
+                etx_pos = masked.index(ETX)
+            except ValueError:
+                etx_pos = None
+
+            # Если нашли ETX и есть хотя бы один байт после него (контрольная сумма), выходим
+            if etx_pos is not None and len(masked) > etx_pos + 1:
+                data = masked
                 break
         time.sleep(0.01)
 
-    if not data:
+    if not raw:
         return None, "Timeout"
+
+    # Применяем маску parity к всему прочитанному буферу
+    data = bytearray(b & 0x7f for b in raw)
+
+    # Проверяем наличие ETX и CRC
+    if ETX not in data or len(data) < 2:
+        logging.debug(f"Incomplete frame: {data.hex()}")
+        return None, "Incomplete frame"
 
     crc = checksum(data)
     if crc != data[-1]:
