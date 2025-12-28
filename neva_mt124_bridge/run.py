@@ -214,9 +214,45 @@ def response_meter(ser, cmd_key, timeout=1):
     # Применяем маску parity к всему прочитанному буферу
     data = bytearray(b & 0x7f for b in raw)
 
-    # Проверяем наличие ETX и CRC
-    if ETX not in data or len(data) < 2:
+    # Если у нас нет ETX — попробуем сделать ещё один короткий доп.чтение
+    if ETX not in data:
+        try:
+            orig_timeout = getattr(ser, 'timeout', None)
+            ser.timeout = 0.1
+            extra = ser.read(64)
+            if extra:
+                raw.extend(extra)
+                data = bytearray(b & 0x7f for b in raw)
+        finally:
+            ser.timeout = orig_timeout
+
+    # Удалим ведущие байты до SOH (например, одиночные ACK=0x06), если они есть
+    soh_idx = None
+    try:
+        soh_idx = data.index(SOH)
+    except ValueError:
+        soh_idx = None
+
+    if soh_idx is None:
+        # Нет SOH — если есть только ACK, вернём ACK как подтверждение
+        if data == bytearray([ACK]):
+            return data, "OK"
         logging.debug(f"Incomplete frame: {data.hex()}")
+        return None, "Incomplete frame"
+
+    if soh_idx > 0:
+        logging.debug(f"Dropping {soh_idx} lead bytes before SOH: {data[:soh_idx].hex()}")
+        data = data[soh_idx:]
+
+    # Проверяем наличие ETX и CRC
+    try:
+        etx_pos = data.index(ETX)
+    except ValueError:
+        logging.debug(f"Incomplete frame after trimming: {data.hex()}")
+        return None, "Incomplete frame"
+
+    if len(data) <= etx_pos + 1:
+        logging.debug(f"No CRC after ETX: {data.hex()}")
         return None, "Incomplete frame"
 
     crc = checksum(data)
