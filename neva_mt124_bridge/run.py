@@ -217,7 +217,9 @@ def open_session(ser):
             logging.debug(f"Parsed type string: '{type_str}'")
             type_val = str2uint(type_str)
             logging.debug(f"Parsed type value: {type_val}")
-            if type_val == 6102:
+            # Map known device type codes to internal types.
+            # 2106 (NEVA MT113/MT124 test ID) uses same protocol as 6102 devices.
+            if type_val == 6102 or type_val == 2106:
                 return NEVA_124_6102
             elif type_val == 7109:
                 return NEVA_124_7109
