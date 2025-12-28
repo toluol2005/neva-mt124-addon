@@ -591,12 +591,10 @@ def main():
     main_baudrate = options['main_baudrate']
     interval = options['interval_seconds']
     prefix = options['mqtt_topic_prefix']
-    
-    # MQTT из HA (bashio или env)
-    mqtt_host = os.environ.get('HASSIO_MQTT_HOST', 'core-mosquitto')
-    mqtt_port = int(os.environ.get('HASSIO_MQTT_PORT', 1883))
-    mqtt_user = os.environ.get('HASSIO_MQTT_USER', '')
-    mqtt_pass = os.environ.get('HASSIO_MQTT_PASSWORD', '')
+    mqtt_host = options['mqtt_host']
+    mqtt_port = int(options['mqtt_port'])
+    mqtt_user = options['mqtt_user']
+    mqtt_pass = options['mqtt_pass']
     
     client = mqtt.Client()
     logging.debug("Connecting to MQTT %s:%d", mqtt_host, mqtt_port)

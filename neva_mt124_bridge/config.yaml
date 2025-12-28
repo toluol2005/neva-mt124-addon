@@ -1,5 +1,5 @@
 name: Neva MT124 Meter Bridge
-version: "1.2.3"
+version: "1.2.4"
 slug: neva_mt124_bridge
 description: Reads data from Neva MT124 meter via serial port and publishes to MQTT for Home Assistant.
 url: "https://github.com/toluol2005/neva-mt124-addon"
@@ -28,12 +28,20 @@ options:
   main_baudrate: 9600
   interval_seconds: 15
   mqtt_topic_prefix: "home/meter"
+  mqtt_host: "core-mosquitto"
+  mqtt_port: 1883
+  mqtt_user: ""
+  mqtt_pass: ""
 schema:
   serial_port: device(subsystem=tty)
   initial_baudrate: int
   main_baudrate: int
   interval_seconds: int
   mqtt_topic_prefix: str
+  mqtt_host: str
+  mqtt_port: int
+  mqtt_user: str
+  mqtt_pass: password
 homeassistant_api: false  # Не нужен, используем MQTT
 map:
   - config:rw
