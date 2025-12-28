@@ -167,13 +167,23 @@ def response_meter(ser, cmd_key, timeout=1):
 
     # Для ack_start — отправляем ACK+'051' на исходной скорости, затем смена скорости
     if cmd_key == 'ack_start':
-        # Ожидаем любой ответ (SOH/... ) после смены скорости — caller переключит скорость
-        # Здесь просто читаем, если есть данные на текущей линии
-        while time.time() - start < timeout:
-            if ser.in_waiting:
-                data.extend(ser.read(ser.in_waiting))
-                break
-            time.sleep(0.01)
+        # Ожидаем ответ после смены скорости: читаем по одному байту с коротким таймаутом
+        orig_timeout = getattr(ser, 'timeout', None)
+        try:
+            ser.timeout = 0.5
+            while time.time() - start < timeout:
+                b = ser.read(1)
+                if b:
+                    data.extend(b)
+                    # если есть дополнительные байты, прочитаем их сразу
+                    if ser.in_waiting:
+                        data.extend(ser.read(ser.in_waiting))
+                    break
+                time.sleep(0.01)
+        finally:
+            # Восстанавливаем оригинальный таймаут
+            ser.timeout = orig_timeout
+
         if not data:
             return None, "Timeout"
         data = bytearray(b & 0x7f for b in data)
@@ -225,11 +235,12 @@ def open_session(ser):
                 return NEVA_124_7109
     return NEVA_124_UNKNOWN
 
-def ack_start(ser, neva_type):
-    # Отправляем ACK+'051' на текущей скорости (обычно 300), затем переключаемся на 9600 и читаем ответ
+def ack_start(ser, neva_type, main_baudrate=BAUDRATE_9600):
+    # Отправляем ACK+'051' на текущей скорости (обычно 300),
+    # ждём 0.2 с, затем переключаемся на `main_baudrate` и читаем ответ
     send_command(ser, 'ack_start')
-    time.sleep(0.05)
-    ser.baudrate = BAUDRATE_9600
+    time.sleep(0.2)  # meter switches baudrate ~200 ms after receiving 051
+    ser.baudrate = main_baudrate
     data, err = response_meter(ser, 'ack_start', timeout=3)
     logging.debug(f"ack_start response raw: {data.hex() if data else 'None'}, error: {err}")
     if err == "OK":
@@ -542,10 +553,10 @@ def main():
     while True:
         try:
             logging.debug("Starting poll cycle")
-            with serial.Serial(serial_port, baudrate=BAUDRATE_300, bytesize=serial.SEVENBITS, parity=serial.PARITY_EVEN, stopbits=serial.STOPBITS_ONE, timeout=2) as ser:  # Even parity как в C
+            with serial.Serial(serial_port, baudrate=initial_baudrate, bytesize=serial.SEVENBITS, parity=serial.PARITY_EVEN, stopbits=serial.STOPBITS_ONE, timeout=2) as ser:  # Even parity как в C
                 neva_type = open_session(ser)
                 if neva_type != NEVA_124_UNKNOWN:
-                    if ack_start(ser, neva_type):
+                    if ack_start(ser, neva_type, main_baudrate):
                         if not discovered:
                             publish_discovery(client, prefix, neva_type)
                             discovered = True
