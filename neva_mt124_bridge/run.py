@@ -14,13 +14,10 @@ ACK = 0x06
 SOH = 0x01
 STX = 0x02
 ETX = 0x03
-
 BAUDRATE_300 = 300
 BAUDRATE_9600 = 9600
-
 MAX_VBAT_MV = 3100
-MIN_VBAT_MV = 2200  # Предполагаю BATTERY_SAFETY_THRESHOLD = 2200
-
+MIN_VBAT_MV = 2200  # Предполагаю BATTERY_SAFETY_THRESHOLD
 PKT_BUFF_MAX_LEN = 256  # Примерный размер
 
 # Команды (как в command_array)
@@ -148,14 +145,14 @@ def send_command(ser, cmd_key):
 def response_meter(ser, cmd_key, timeout=1):
     start = time.time()
     data = bytearray()
-
+    
     # Для open_channel — читаем до CR LF (идентификационная строка)
     if cmd_key == 'open_channel':
         while time.time() - start < timeout:
             if ser.in_waiting:
                 data.extend(ser.read(ser.in_waiting))
-                if b'\r\n' in data:
-                    break
+            if b'\r\n' in data:
+                break
             time.sleep(0.01)
         if not data:
             return None, "Timeout"
@@ -164,7 +161,7 @@ def response_meter(ser, cmd_key, timeout=1):
             logging.debug(f"Raw data: {data.hex()}")
             return None, "Invalid response"
         return data, "OK"
-
+    
     # Для ack_start — отправляем ACK+'051' на исходной скорости, затем смена скорости
     if cmd_key == 'ack_start':
         # Ожидаем ответ после смены скорости: читаем по одному байту с коротким таймаутом
@@ -183,84 +180,90 @@ def response_meter(ser, cmd_key, timeout=1):
         finally:
             # Восстанавливаем оригинальный таймаут
             ser.timeout = orig_timeout
-
         if not data:
             return None, "Timeout"
         data = bytearray(b & 0x7f for b in data)
         return data, "OK"
-
+    
     # Общая ветка для протокольных команд со структурой (SOH ... ETX <CRC>)
     raw = bytearray()
     while time.time() - start < timeout:
         if ser.in_waiting:
             raw.extend(ser.read(ser.in_waiting))
-            # Посмотрим, есть ли в маскированном буфере ETX (0x03)
-            masked = bytearray(b & 0x7f for b in raw)
-            etx_pos = None
+        
+        # Применяем маску parity к всему прочитанному буферу
+        data = bytearray(b & 0x7f for b in raw)
+        
+        # Проверим, есть ли в буфере полный фрейм (SOH ... ETX <CRC>)
+        soh_idx = None
+        try:
+            soh_idx = data.index(SOH)
+        except ValueError:
+            soh_idx = None
+            
+        if soh_idx is not None:
+            # Найдем ETX после SOH
             try:
-                etx_pos = masked.index(ETX)
+                etx_pos = data.index(ETX, soh_idx)
             except ValueError:
                 etx_pos = None
-
-            # Если нашли ETX и есть хотя бы один байт после него (контрольная сумма), выходим
-            if etx_pos is not None and len(masked) > etx_pos + 1:
-                data = masked
-                break
+                
+            # Если нашли ETX и есть хотя бы один байт после него (контрольная сумма), проверим CRC
+            if etx_pos is not None and len(data) > etx_pos + 1:
+                frame_data = data[soh_idx:etx_pos+2]  # Включаем ETX и CRC
+                crc = checksum(frame_data)
+                if crc == frame_data[-1]:
+                    # Удалим ведущие байты до SOH, если они есть
+                    if soh_idx > 0:
+                        logging.debug(f"Dropping {soh_idx} lead bytes before SOH: {data[:soh_idx].hex()}")
+                    return frame_data, "OK"
+                else:
+                    logging.debug(f"CRC mismatch: calculated {crc:02x}, received {frame_data[-1]:02x}")
+                    # Продолжаем читать, возможно фрейм еще не полный
+        
         time.sleep(0.01)
-
+    
     if not raw:
         return None, "Timeout"
-
-    # Применяем маску parity к всему прочитанному буферу
-    data = bytearray(b & 0x7f for b in raw)
-
-    # Если у нас нет ETX — попробуем сделать ещё один короткий доп.чтение
-    if ETX not in data:
-        try:
-            orig_timeout = getattr(ser, 'timeout', None)
-            ser.timeout = 0.1
-            extra = ser.read(64)
-            if extra:
-                raw.extend(extra)
-                data = bytearray(b & 0x7f for b in raw)
-        finally:
-            ser.timeout = orig_timeout
-
-    # Удалим ведущие байты до SOH (например, одиночные ACK=0x06), если они есть
-    soh_idx = None
+    
+    # Если у нас нет полного фрейма — попробуем сделать ещё один короткий доп.чтение
     try:
-        soh_idx = data.index(SOH)
-    except ValueError:
-        soh_idx = None
-
-    if soh_idx is None:
-        # Нет SOH — если есть только ACK, вернём ACK как подтверждение
-        if data == bytearray([ACK]):
-            return data, "OK"
-        logging.debug(f"Incomplete frame: {data.hex()}")
-        return None, "Incomplete frame"
-
-    if soh_idx > 0:
-        logging.debug(f"Dropping {soh_idx} lead bytes before SOH: {data[:soh_idx].hex()}")
-        data = data[soh_idx:]
-
-    # Проверяем наличие ETX и CRC
-    try:
-        etx_pos = data.index(ETX)
-    except ValueError:
-        logging.debug(f"Incomplete frame after trimming: {data.hex()}")
-        return None, "Incomplete frame"
-
-    if len(data) <= etx_pos + 1:
-        logging.debug(f"No CRC after ETX: {data.hex()}")
-        return None, "Incomplete frame"
-
-    crc = checksum(data)
-    if crc != data[-1]:
-        logging.debug(f"CRC mismatch: calculated {crc:02x}, received {data[-1]:02x}")
-        return None, "CRC error"
-
-    return data, "OK"
+        orig_timeout = getattr(ser, 'timeout', None)
+        ser.timeout = 0.1
+        extra = ser.read(64)
+        if extra:
+            raw.extend(extra)
+            data = bytearray(b & 0x7f for b in raw)
+            
+            # Повторим проверку на наличие полного фрейма
+            soh_idx = None
+            try:
+                soh_idx = data.index(SOH)
+            except ValueError:
+                soh_idx = None
+                
+            if soh_idx is not None:
+                try:
+                    etx_pos = data.index(ETX, soh_idx)
+                except ValueError:
+                    etx_pos = None
+                    
+                if etx_pos is not None and len(data) > etx_pos + 1:
+                    frame_data = data[soh_idx:etx_pos+2]  # Включаем ETX и CRC
+                    crc = checksum(frame_data)
+                    if crc == frame_data[-1]:
+                        if soh_idx > 0:
+                            logging.debug(f"Dropping {soh_idx} lead bytes before SOH: {data[:soh_idx].hex()}")
+                        return frame_data, "OK"
+    finally:
+        ser.timeout = orig_timeout
+    
+    # Нет SOH — если есть только ACK, вернём ACK как подтверждение
+    if len(data) == 1 and data[0] == ACK:
+        return data, "OK"
+    
+    logging.debug(f"Incomplete frame: {data.hex()}")
+    return None, "Incomplete frame"
 
 # Основные функции get_*
 def open_session(ser):
@@ -269,7 +272,6 @@ def open_session(ser):
     logging.debug("Response: %s, error: %s", data, err)
     if err != "OK":
         return NEVA_124_UNKNOWN
-    
     time.sleep(0.1)
     
     # Старая логика парсинга (оставляем на случай расширенных ответов)
@@ -386,10 +388,10 @@ def get_power_data(ser, neva_type):
         else:
             if power != 0:
                 power //= 100
-                divisor = 1000
-                if power > 0xffff:
-                    power //= 10
-                    divisor //= 10
+            divisor = 1000
+            if power > 0xffff:
+                power //= 10
+                divisor //= 10
             else:
                 divisor = 1
         return power & 0xffff, divisor & 0xffff, multiplier
@@ -482,7 +484,7 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/tariff1/config", json.dumps(config), retain=True)
-
+    
     # Tariff 2
     config = {
         "name": "Tariff 2 Energy",
@@ -494,8 +496,8 @@ def publish_discovery(client, prefix, neva_type):
         "device": device_info
     }
     client.publish(f"homeassistant/sensor/neva_mt124/tariff2/config", json.dumps(config), retain=True)
-
-      # Tariff 3
+    
+    # Tariff 3
     config = {
         "name": "Tariff 3 Energy",
         "state_topic": f"{prefix}/tariff3",
@@ -507,7 +509,7 @@ def publish_discovery(client, prefix, neva_type):
     }
     client.publish(f"homeassistant/sensor/neva_mt124/tariff3/config", json.dumps(config), retain=True)
     
-      # Tariff 4
+    # Tariff 4
     config = {
         "name": "Tariff 4 Energy",
         "state_topic": f"{prefix}/tariff4",
@@ -602,25 +604,22 @@ def main():
     client.loop_start()
     
     discovered = False
-    
     while True:
         try:
             logging.debug("Starting poll cycle")
-            with serial.Serial(serial_port, baudrate=initial_baudrate, bytesize=serial.SEVENBITS, parity=serial.PARITY_EVEN, stopbits=serial.STOPBITS_ONE, timeout=2) as ser:  # Even parity как в C
+            with serial.Serial(serial_port, baudrate=initial_baudrate, bytesize=serial.SEVENBITS, parity=serial.PARITY_EVEN, stopbits=serial.STOPBITS_ONE, timeout=2) as ser:
+                # Even parity как в C
                 neva_type = open_session(ser)
                 if neva_type != NEVA_124_UNKNOWN:
                     if ack_start(ser, neva_type, main_baudrate):
                         if not discovered:
                             publish_discovery(client, prefix, neva_type)
                             discovered = True
-                        
                         data = {}
-                        
                         serial_num = get_serial_number_data(ser)
                         if serial_num:
                             data['serial'] = serial_num
                             client.publish(f"{prefix}/serial", serial_num)
-                        
                         # Date release не поддерживается, пропускаем или статично "Not supported"
                         client.publish(f"{prefix}/date_release", "Not supported")
                         
@@ -628,10 +627,11 @@ def main():
                             tariffs = get_tariffs_6102(ser)
                         else:
                             tariffs = get_tariffs_7109(ser)
-                            battery = get_resbat_data(ser)
-                            if battery is not None:
-                                data['battery'] = battery
-                                client.publish(f"{prefix}/battery", battery)
+                        
+                        battery = get_resbat_data(ser)
+                        if battery is not None:
+                            data['battery'] = battery
+                            client.publish(f"{prefix}/battery", battery)
                         
                         if tariffs:
                             client.publish(f"{prefix}/total_energy", tariffs['tariff_summ'] / tariffs['energy_divisor'])
@@ -639,7 +639,7 @@ def main():
                             client.publish(f"{prefix}/tariff2", tariffs['tariff2'] / tariffs['energy_divisor'])
                             client.publish(f"{prefix}/tariff3", tariffs['tariff3'] / tariffs['energy_divisor'])
                             client.publish(f"{prefix}/tariff4", tariffs['tariff4'] / tariffs['energy_divisor'])
-                                              
+                        
                         power, power_div, mult = get_power_data(ser, neva_type)
                         if power is not None:
                             client.publish(f"{prefix}/power", (power * mult) / power_div)
@@ -653,12 +653,10 @@ def main():
                             client.publish(f"{prefix}/current", amps / amps_div)
                         
                         print(f"Data published: {data}")
-                        
-                close_session(ser)
+                        close_session(ser)
         except Exception as e:
             logging.error("Global error: %s", e)
-#            print(f"Error: {e}")
-        
+            # print(f"Error: {e}")
         time.sleep(interval)
 
 if __name__ == "__main__":
