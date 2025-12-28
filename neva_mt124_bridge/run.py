@@ -26,8 +26,7 @@ PKT_BUFF_MAX_LEN = 256  # Примерный размер
 # Команды (как в command_array)
 COMMANDS = {
     'open_channel': b'/?!\r\n',
-    # Send ACK + '051' + CR LF (select mode + baud switching request)
-    'ack_start': bytes([ACK, 0x30, 0x35, 0x31, 0x0D, 0x0A]),
+    'ack_start': bytes([ACK, 0x30, 0x33, 0x31, 0x0D, 0x0A]),
     'password_6102': bytes([SOH, 0x50, 0x31, STX, 0x28, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x30, 0x29, ETX, 0x61]),
     'password_7109': bytes([SOH, 0x50, 0x31, STX, 0x28, 0x29, ETX, 0x61]),
     'serial_number': bytes([SOH, 0x52, 0x31, STX, 0x36, 0x30, 0x30, 0x31, 0x30, 0x30, 0x46, 0x46, 0x28, 0x29, ETX, 0x64]),
@@ -128,20 +127,14 @@ def str_from_brackets(p_str):
 
 def send_command(ser, cmd_key):
     cmd = COMMANDS[cmd_key]
-    # ВРЕМЕННО: отправляем без parity преобразования
-    # parity_cmd = bytearray()
-    # for byte in cmd:
-    #    if check_even_parity(byte):
-    #        parity_cmd.append(byte | 0x80)
-    #    else:
-    #        parity_cmd.append(byte)
-    # ser.write(parity_cmd)
-    ser.write(cmd)  # ← отправляем сырые байты
-    time.sleep(0.2)
-    logging.debug(f"Sent {cmd_key} (raw): {cmd.hex()}")
-    return len(cmd)    
-    #logging.debug(f"Sent {cmd_key}: {parity_cmd.hex()}")
-    #return len(parity_cmd)
+    parity_cmd = bytearray()
+    for byte in cmd:
+        if check_even_parity(byte):
+            parity_cmd.append(byte | 0x80)
+        else:
+            parity_cmd.append(byte)
+    ser.write(parity_cmd)
+    return len(parity_cmd)
 
 def response_meter(ser, cmd_key, timeout=1):
     start = time.time()
@@ -190,11 +183,30 @@ def response_meter(ser, cmd_key, timeout=1):
     if not data:
         return None, "Timeout"
 
-    crc = checksum(data)
-    if crc != data[-1]:
-        logging.debug(f"CRC mismatch: calculated {crc:02x}, received {data[-1]:02x}")
-        return None, "CRC error"
-
+    # ОСОБАЯ ОБРАБОТКА ДЛЯ ACK_START
+    if cmd_key == 'ack_start':
+        # Для ack_start ожидаем просто ACK (0x06) или короткий ответ
+        if data[0] == ACK:  # 0x06
+            return data, "OK"
+        else:
+            logging.debug(f"ack_start - invalid response: {data.hex()}")
+            return None, "Invalid ACK"
+            
+    # Проверка CRC и формата (адаптировано из C)
+    if cmd_key == 'open_channel':
+        if data[0] != ord('/'):
+            logging.debug(f"Raw data: {data.hex()}")
+            return None, "Invalid response"
+    elif cmd_key == 'password_6102':
+        if data[0] != ACK:
+            logging.debug(f"Raw data: {data.hex()}")
+            return None, "Invalid response"
+    else:
+        crc = checksum(data)
+        if crc != data[-1]:
+            logging.debug(f"CRC mismatch: calculated {crc:02x}, received {data[-1]:02x}")
+            return None, "CRC error"
+    
     return data, "OK"
 
 # Основные функции get_*
@@ -202,12 +214,17 @@ def open_session(ser):
     send_command(ser, 'open_channel')
     data, err = response_meter(ser, 'open_channel')
     logging.debug("Response: %s, error: %s", data, err)
-    
     if err != "OK":
         return NEVA_124_UNKNOWN
     
     time.sleep(0.1)
-    # Ожидаем идентификационную строку вида '/...CRLF' и парсим тип после точки
+    
+    # Если ответ равен '/', считаем что соединение установлено
+    if data == bytearray(b'/'):
+        logging.debug("Received '/', connection established")
+        # ВАЖНО: Мы не знаем точный тип, но можно предположить MT124
+        # Или вернуть NEVA_124_6102 по умолчанию для продолжения работы
+        return NEVA_124_6102  # Или NEVA_124_7109, в зависимости от вашего счётчика
     
     # Старая логика парсинга (оставляем на случай расширенных ответов)
     if len(data) >= 5:
@@ -224,12 +241,10 @@ def open_session(ser):
     return NEVA_124_UNKNOWN
 
 def ack_start(ser, neva_type):
-    # Send ACK+'051' at current (initial) baudrate, then switch to main baudrate and read response
-    send_command(ser, 'ack_start')
-    time.sleep(0.05)
     ser.baudrate = BAUDRATE_9600
+    send_command(ser, 'ack_start')
     
-    data, err = response_meter(ser, 'ack_start', timeout=3)
+    data, err = response_meter(ser, 'ack_start', timeout=2)
     logging.debug(f"ack_start response raw: {data.hex() if data else 'None'}, error: {err}")
     if err == "OK":
         if neva_type == NEVA_124_6102:
@@ -541,9 +556,8 @@ def main():
     while True:
         try:
             logging.debug("Starting poll cycle")
-            with serial.Serial(serial_port, initial_baudrate, timeout=10, bytesize=7, parity=serial.PARITY_EVEN, stopbits=serial.STOPBITS_ONE) as ser:  # Even parity как в C
+            with serial.Serial(serial_port, baudrate=BAUDRATE_300, bytesize=serial.SEVENBITS, parity=serial.PARITY_EVEN, stopbits=serial.STOPBITS_ONE, timeout=2) as ser:  # Even parity как в C
                 neva_type = open_session(ser)
-                logging.debug(f"open_session returned: {neva_type}")
                 if neva_type != NEVA_124_UNKNOWN:
                     if ack_start(ser, neva_type):
                         if not discovered:
