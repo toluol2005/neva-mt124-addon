@@ -559,17 +559,18 @@ def publish_discovery(client, prefix, neva_type):
     }
     client.publish(f"homeassistant/sensor/neva_mt124/current/config", json.dumps(config), retain=True)
 
-    # Battery
-    config = {
-        "name": "Battery Level",
-        "state_topic": f"{prefix}/battery",
-        "unit_of_measurement": "%",
-        "device_class": "battery",
-        "state_class": "measurement",
-        "unique_id": "neva_battery",
-        "device": device_info
-    }
-    client.publish(f"homeassistant/sensor/neva_mt124/battery/config", json.dumps(config), retain=True)
+    if neva_type == NEVA_124_6102:
+        # Battery
+        config = {
+            "name": "Battery Level",
+            "state_topic": f"{prefix}/battery",
+            "unit_of_measurement": "%",
+            "device_class": "battery",
+            "state_class": "measurement",
+            "unique_id": "neva_battery",
+            "device": device_info
+        }
+        client.publish(f"homeassistant/sensor/neva_mt124/battery/config", json.dumps(config), retain=True)
 
     # Serial Number (string)
     config = {
@@ -632,11 +633,12 @@ def main():
                         else:
                             tariffs = get_tariffs_7109(ser)
 
-                        battery = get_resbat_data(ser)
-                        if battery is not None:
-                            data['battery'] = battery
-                            client.publish(f"{prefix}/battery", battery)
-                            logging.debug("Publishing battery: %s to %s", battery, f"{prefix}/battery")
+                        if neva_type == NEVA_124_6102:
+                            battery = get_resbat_data(ser)
+                            if battery is not None:
+                                data['battery'] = battery
+                                client.publish(f"{prefix}/battery", battery)
+                                logging.debug("Publishing battery: %s to %s", battery, f"{prefix}/battery")
 
                         if tariffs:
                             total_energy = tariffs['tariff_summ'] / tariffs['energy_divisor']
