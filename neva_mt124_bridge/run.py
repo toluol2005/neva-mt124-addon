@@ -535,29 +535,30 @@ def publish_discovery(client, prefix, neva_type):
     }
     client.publish(f"homeassistant/sensor/neva_mt124/power/config", json.dumps(config), retain=True)
 
-    # Voltage
-    config = {
-        "name": "Voltage",
-        "state_topic": f"{prefix}/voltage",
-        "unit_of_measurement": "V",
-        "device_class": "voltage",
-        "state_class": "measurement",
-        "unique_id": "neva_voltage",
-        "device": device_info
-    }
-    client.publish(f"homeassistant/sensor/neva_mt124/voltage/config", json.dumps(config), retain=True)
+    if neva_type == NEVA_124_6102:
+        # Voltage
+        config = {
+            "name": "Voltage",
+            "state_topic": f"{prefix}/voltage",
+            "unit_of_measurement": "V",
+            "device_class": "voltage",
+            "state_class": "measurement",
+            "unique_id": "neva_voltage",
+            "device": device_info
+        }
+        client.publish(f"homeassistant/sensor/neva_mt124/voltage/config", json.dumps(config), retain=True)
 
-    # Current
-    config = {
-        "name": "Current",
-        "state_topic": f"{prefix}/current",
-        "unit_of_measurement": "A",
-        "device_class": "current",
-        "state_class": "measurement",
-        "unique_id": "neva_current",
-        "device": device_info
-    }
-    client.publish(f"homeassistant/sensor/neva_mt124/current/config", json.dumps(config), retain=True)
+        # Current
+        config = {
+            "name": "Current",
+            "state_topic": f"{prefix}/current",
+            "unit_of_measurement": "A",
+            "device_class": "current",
+            "state_class": "measurement",
+            "unique_id": "neva_current",
+            "device": device_info
+        }
+        client.publish(f"homeassistant/sensor/neva_mt124/current/config", json.dumps(config), retain=True)
 
     if neva_type == NEVA_124_6102:
         # Battery
@@ -663,17 +664,18 @@ def main():
                             client.publish(f"{prefix}/power", power_val)
                             logging.debug("Publishing power: %s", power_val)
 
-                        volts, volts_div = get_voltage_data(ser)
-                        if volts is not None:
-                            volts_val = volts / volts_div
-                            client.publish(f"{prefix}/voltage", volts_val)
-                            logging.debug("Publishing voltage: %s", volts_val)
+                        if neva_type == NEVA_124_6102:
+                            volts, volts_div = get_voltage_data(ser)
+                            if volts is not None:
+                                volts_val = volts / volts_div
+                                client.publish(f"{prefix}/voltage", volts_val)
+                                logging.debug("Publishing voltage: %s", volts_val)
 
-                        amps, amps_div = get_amps_data(ser)
-                        if amps is not None:
-                            amps_val = amps / amps_div
-                            client.publish(f"{prefix}/current", amps_val)
-                            logging.debug("Publishing current: %s", amps_val)
+                            amps, amps_div = get_amps_data(ser)
+                            if amps is not None:
+                                amps_val = amps / amps_div
+                                client.publish(f"{prefix}/current", amps_val)
+                                logging.debug("Publishing current: %s", amps_val)
                         
                         print(f"Data published: {data}")
                         close_session(ser)
