@@ -194,28 +194,28 @@ def response_meter(ser, cmd_key, timeout=1):
         # Применяем маску parity к всему прочитанному буферу
         data = bytearray(b & 0x7f for b in raw)
         
-        # Проверим, есть ли в буфере полный фрейм (SOH ... ETX <CRC>)
-        soh_idx = None
+        # Проверим, есть ли в буфере полный фрейм (STX ... ETX <CRC>)
+        stx_idx = None
         try:
-            soh_idx = data.index(SOH)
+            stx_idx = data.index(STX)
         except ValueError:
-            soh_idx = None
-            
-        if soh_idx is not None:
-            # Найдем ETX после SOH
+            stx_idx = None
+
+        if stx_idx is not None:
+            # Найдем ETX после STX
             try:
-                etx_pos = data.index(ETX, soh_idx)
+                etx_pos = data.index(ETX, stx_idx)
             except ValueError:
                 etx_pos = None
                 
             # Если нашли ETX и есть хотя бы один байт после него (контрольная сумма), проверим CRC
             if etx_pos is not None and len(data) > etx_pos + 1:
-                frame_data = data[soh_idx:etx_pos+2]  # Включаем ETX и CRC
+                frame_data = data[stx_idx:etx_pos+2]  # Включаем ETX и CRC
                 crc = checksum(frame_data)
                 if crc == frame_data[-1]:
-                    # Удалим ведущие байты до SOH, если они есть
-                    if soh_idx > 0:
-                        logging.debug(f"Dropping {soh_idx} lead bytes before SOH: {data[:soh_idx].hex()}")
+                    # Удалим ведущие байты до STX, если они есть
+                    if stx_idx > 0:
+                        logging.debug(f"Dropping {stx_idx} lead bytes before STX: {data[:stx_idx].hex()}")
                     return frame_data, "OK"
                 else:
                     logging.debug(f"CRC mismatch: calculated {crc:02x}, received {frame_data[-1]:02x}")
@@ -234,26 +234,26 @@ def response_meter(ser, cmd_key, timeout=1):
         if extra:
             raw.extend(extra)
             data = bytearray(b & 0x7f for b in raw)
-            
+
             # Повторим проверку на наличие полного фрейма
-            soh_idx = None
+            stx_idx = None
             try:
-                soh_idx = data.index(SOH)
+                stx_idx = data.index(STX)
             except ValueError:
-                soh_idx = None
-                
-            if soh_idx is not None:
+                stx_idx = None
+
+            if stx_idx is not None:
                 try:
-                    etx_pos = data.index(ETX, soh_idx)
+                    etx_pos = data.index(ETX, stx_idx)
                 except ValueError:
                     etx_pos = None
-                    
+
                 if etx_pos is not None and len(data) > etx_pos + 1:
-                    frame_data = data[soh_idx:etx_pos+2]  # Включаем ETX и CRC
+                    frame_data = data[stx_idx:etx_pos+2]  # Включаем ETX и CRC
                     crc = checksum(frame_data)
                     if crc == frame_data[-1]:
-                        if soh_idx > 0:
-                            logging.debug(f"Dropping {soh_idx} lead bytes before SOH: {data[:soh_idx].hex()}")
+                        if stx_idx > 0:
+                            logging.debug(f"Dropping {stx_idx} lead bytes before STX: {data[:stx_idx].hex()}")
                         return frame_data, "OK"
     finally:
         ser.timeout = orig_timeout
