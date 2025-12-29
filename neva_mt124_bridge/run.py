@@ -6,6 +6,10 @@ import os
 import sys
 import logging
 
+# Set timezone to UTC for logs
+os.environ['TZ'] = 'UTC'
+time.tzset()
+
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.debug("Script started - debugging mode")
 
@@ -679,6 +683,17 @@ def main():
                         
                         print(f"Data published: {data}")
                         close_session(ser)
+                    else:
+                        # ack_start failed, close session to reset meter
+                        logging.debug("ack_start failed, closing session to reset meter")
+                        close_session(ser)
+                else:
+                    # Unknown meter type, try closing if possible
+                    logging.debug("Unknown meter type, sending close if session open")
+                    try:
+                        close_session(ser)
+                    except:
+                        pass  # Ignore errors on close if not connected
         except Exception as e:
             logging.error("Global error: %s", e)
             # print(f"Error: {e}")
