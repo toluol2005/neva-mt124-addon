@@ -1,5 +1,5 @@
 name: Neva MT124 Meter Bridge
-version: "1.2.8"
+version: "1.2.9"
 slug: neva_mt124_bridge
 description: Reads data from Neva MT124 meter via serial port and publishes to MQTT for Home Assistant.
 url: "https://github.com/toluol2005/neva-mt124-addon"
@@ -32,6 +32,7 @@ options:
   mqtt_port: 1883
   mqtt_user: ""
   mqtt_pass: ""
+  timezone: "Europe/Moscow"
 schema:
   serial_port: device(subsystem=tty)
   initial_baudrate: int
@@ -42,6 +43,7 @@ schema:
   mqtt_port: int
   mqtt_user: str
   mqtt_pass: password
+  timezone: str
 homeassistant_api: false  # Не нужен, используем MQTT
 map:
   - config:rw

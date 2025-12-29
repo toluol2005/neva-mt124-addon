@@ -6,9 +6,7 @@ import os
 import sys
 import logging
 
-# Set timezone to UTC for logs
-os.environ['TZ'] = 'UTC'
-time.tzset()
+# Timezone will be set from config later
 
 logging.basicConfig(level=logging.DEBUG, format='%(asctime)s - %(levelname)s - %(message)s')
 logging.debug("Script started - debugging mode")
@@ -602,6 +600,10 @@ def main():
     mqtt_port = int(options['mqtt_port'])
     mqtt_user = options['mqtt_user']
     mqtt_pass = options['mqtt_pass']
+    timezone = options.get('timezone', 'UTC')
+    os.environ['TZ'] = timezone
+    time.tzset()
+    logging.debug("Set timezone to: %s", timezone)
     
     client = mqtt.Client()
     logging.debug("Connecting to MQTT %s:%d", mqtt_host, mqtt_port)
